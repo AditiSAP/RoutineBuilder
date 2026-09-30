@@ -8,7 +8,7 @@ import * as Notifications from "expo-notifications";
 import * as Sharing from "expo-sharing";
 import { StatusBar } from "expo-status-bar";
 import { googleCalendarUrl, routineToIcs } from "./src/calendar";
-import { addDays, displayDuration, formatDateKey, formatTime, itemDateRange, itemsForDate, parseDateKey } from "./src/schedule";
+import { addDays, displayDuration, formatDateKey, formatTime, itemDateRange, itemsForDate, normalizeTime, parseDateKey } from "./src/schedule";
 import { notificationSummary } from "./src/notification-plans";
 import { configureNotificationChannel, rescheduleNotifications } from "./src/notifications";
 import { LocalRoutineRepository, toggleCompletion } from "./src/storage";
@@ -34,10 +34,6 @@ function emptyItem(order: number): RoutineItem {
 
 function readableDate(date: Date): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date);
-}
-
-function validTime(value: string): boolean {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function validHttpUrl(value: string): boolean {
@@ -219,14 +215,35 @@ function RoutineCard({ item, done, onToggle, onEdit, onCalendar, colors, styles 
 
 function ItemEditor({ visible, item, onClose, onSave, colors, styles }: { visible: boolean; item: RoutineItem | null; onClose: () => void; onSave: (item: RoutineItem) => void; colors: Palette; styles: ReturnType<typeof makeStyles> }) {
   const [draft, setDraft] = useState<RoutineItem | null>(item);
-  useEffect(() => setDraft(item ? structuredClone(item) : null), [item]);
+  const [validationError, setValidationError] = useState("");
+  useEffect(() => {
+    setDraft(item ? structuredClone(item) : null);
+    setValidationError("");
+  }, [item]);
   if (!draft) return null;
   const update = <K extends keyof RoutineItem>(key: K, value: RoutineItem[K]) => setDraft((current) => current ? { ...current, [key]: value } : current);
   const save = () => {
-    if (!draft.title.trim() || !validTime(draft.startTime) || (draft.endTime && !validTime(draft.endTime)) || !draft.days.length) return Alert.alert("Check your routine", "Add a title, use 24-hour times like 09:30, and choose at least one day.");
+    const startTime = normalizeTime(draft.startTime);
+    const endTime = draft.endTime.trim() ? normalizeTime(draft.endTime) : "";
+    if (!draft.title.trim()) {
+      setValidationError("Add a title before saving.");
+      return;
+    }
+    if (!startTime || (draft.endTime.trim() && !endTime)) {
+      setValidationError("Use a valid 24-hour time such as 7:00 or 19:30.");
+      return;
+    }
+    if (!draft.days.length) {
+      setValidationError("Choose at least one recurring day.");
+      return;
+    }
     const invalidLink = draft.links.find((link) => link.url && !validHttpUrl(link.url));
-    if (invalidLink) return Alert.alert("Check your links", "Links must start with http:// or https://.");
-    onSave({ ...draft, title: draft.title.trim(), links: draft.links.filter((link) => link.url.trim()) });
+    if (invalidLink) {
+      setValidationError("Links must start with http:// or https://.");
+      return;
+    }
+    setValidationError("");
+    onSave({ ...draft, title: draft.title.trim(), startTime, endTime: endTime ?? "", links: draft.links.filter((link) => link.url.trim()) });
   };
   return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <SafeAreaView style={styles.modalSafe}>
@@ -241,6 +258,7 @@ function ItemEditor({ visible, item, onClose, onSave, colors, styles }: { visibl
           <Text style={styles.label}>NOTES</Text><TextInput multiline placeholder="Context, preparation, or an intention…" placeholderTextColor={colors.muted} value={draft.notes} onChangeText={(value) => update("notes", value)} style={[styles.input, styles.textarea]} />
           <Text style={styles.label}>LINKS</Text>{draft.links.map((link) => <View key={link.id} style={styles.linkEditor}><View style={styles.flex}><TextInput placeholder="Label" placeholderTextColor={colors.muted} value={link.label} onChangeText={(value) => update("links", draft.links.map((candidate) => candidate.id === link.id ? { ...candidate, label: value } : candidate))} style={styles.input} /><TextInput autoCapitalize="none" keyboardType="url" placeholder="https://…" placeholderTextColor={colors.muted} value={link.url} onChangeText={(value) => update("links", draft.links.map((candidate) => candidate.id === link.id ? { ...candidate, url: value } : candidate))} style={styles.input} /></View><Pressable onPress={() => update("links", draft.links.filter((candidate) => candidate.id !== link.id))}><Text style={styles.remove}>×</Text></Pressable></View>)}
           <Pressable onPress={() => update("links", [...draft.links, { id: uid(), label: "Open link", url: "" }])}><Text style={styles.addLink}>＋ Add link</Text></Pressable>
+          {validationError ? <Text accessibilityRole="alert" style={styles.validationError}>{validationError}</Text> : null}
           <Text style={styles.helper}>{notificationSummary(draft)}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -278,5 +296,6 @@ function makeStyles(c: Palette) {
     dayRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }, day: { width: 39, height: 39, borderRadius: 20, borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center", backgroundColor: c.card }, dayText: { color: c.ink, fontWeight: "700" },
     categoryScroll: { marginBottom: 5 }, categoryChoice: { paddingHorizontal: 13, paddingVertical: 9, marginRight: 7, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18 }, categoryText: { color: c.ink, fontSize: 12, fontWeight: "600" },
     linkEditor: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 7 }, remove: { color: c.coral, fontSize: 28, padding: 7 }, addLink: { color: c.sage, fontWeight: "700", paddingVertical: 10 }, helper: { color: c.muted, fontSize: 10, marginTop: 18, textAlign: "center" },
+    validationError: { color: c.coral, fontSize: 13, fontWeight: "700", marginTop: 10, textAlign: "center" },
   });
 }

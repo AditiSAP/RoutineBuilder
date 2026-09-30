@@ -6,6 +6,14 @@ export function parseTime(value: string): number {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+export function normalizeTime(value: string): string | null {
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(value.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  if (hour > 23) return null;
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}
+
 export function formatTime(value: string): string {
   const minutes = parseTime(value);
   const hour = Math.floor(minutes / 60);

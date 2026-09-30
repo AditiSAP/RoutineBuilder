@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayDuration, formatDateKey, formatTime, itemDateRange, itemsForDate, parseTime } from "./schedule";
+import { displayDuration, formatDateKey, formatTime, itemDateRange, itemsForDate, normalizeTime, parseTime } from "./schedule";
 import type { RoutineItem } from "./types";
 
 const item = (overrides: Partial<RoutineItem> = {}): RoutineItem => ({
@@ -11,6 +11,9 @@ describe("schedule helpers", () => {
   it("parses and formats valid times", () => {
     expect(parseTime("00:05")).toBe(5);
     expect(formatTime("13:05")).toBe("1:05 PM");
+    expect(normalizeTime("7:05")).toBe("07:05");
+    expect(normalizeTime("23:59")).toBe("23:59");
+    expect(normalizeTime("24:00")).toBeNull();
     expect(() => parseTime("24:00")).toThrow();
   });
 
