@@ -22,7 +22,9 @@
           "defaultChannel": "routine-reminders",
           "sounds": []
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-status-bar"
     ]
   }
 }
